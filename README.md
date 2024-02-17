@@ -27,7 +27,7 @@ Make sure you have the submodules available and run the `enum.lua` file as a
 script to run the tests:
 
 ```
-git submodule init --recursive
+git submodule update --init --recursive
 lua ./enum.lua
 ```
 
