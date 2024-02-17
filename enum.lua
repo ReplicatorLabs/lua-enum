@@ -2,19 +2,6 @@
 assert(_VERSION == "Lua 5.4", "Enum: unsupported lua version: " .. tostring(_VERSION))
 
 --[[
-Unit test helpers
---]]
-
-local function countTableKeys(value)
-  local keys = {}
-  for key, _ in pairs(value) do
-    table.insert(keys, key)
-  end
-
-  return #keys
-end
-
---[[
 Symbol
 --]]
 
@@ -23,7 +10,7 @@ local symbol_private_data <const> = setmetatable({}, {__mode='k'})
 
 local Symbol <const> = setmetatable({
   create = function (enum, name, value)
-    if type(enum) ~= 'table' and not next(enum) then
+    if type(enum) ~= 'table' or next(enum) then
       error("Symbol enum instance must be an empty table")
     end
 
@@ -89,39 +76,6 @@ local Symbol <const> = setmetatable({
 })
 
 --[[
-Symbol unit tests
---]]
-
-assert(countTableKeys(symbol_private_data) == 0) -- GC
-
-local foo = {}
-local test1 = Symbol(foo, 'NAME', 'name')
-local test2 = Symbol(foo, 'NAME', 'name')
-local test3 = Symbol(foo, 'AGE', 'age')
-
-assert(countTableKeys(symbol_private_data) == 3) -- GC
-
-local test1_string_repr = tostring(test1)
-assert(string.find(test1_string_repr, 'Symbol: ') == 1)
-
-assert(Symbol.is(test1))
-assert(not Symbol.is({}))
-assert(test1.enum == foo)
-assert(test1.name == 'NAME')
-assert(test1.value == 'name')
-assert(test1 == test2)
-assert(test1 ~= test3)
-
-test1 = nil
-collectgarbage("collect")
-assert(countTableKeys(symbol_private_data) == 2) -- GC
-
-test2 = nil
-test3 = nil
-collectgarbage("collect")
-assert(countTableKeys(symbol_private_data) == 0) -- GC
-
---[[
 Enum
 --]]
 
@@ -155,7 +109,7 @@ local Enum <const> = setmetatable({
 
     -- use the array values as symbol names
     if symbols_is_array then
-      for _, name in pairs(symbols) do
+      for _, name in ipairs(symbols) do
         local symbol <const> = Symbol(instance, name, name)
         if symbols_by_name[symbol.name] then
           error("Enum symbol name is not unique: " .. tostring(symbol.name))
@@ -184,7 +138,6 @@ local Enum <const> = setmetatable({
     local private <const> = {symbols_by_name=symbols_by_name, symbols_by_value=symbols_by_value}
     enum_private_data[instance] = private
 
-    -- XXX
     return setmetatable(instance, {
       __name = 'Enum',
       __metatable = enum_metatable,
@@ -193,6 +146,30 @@ local Enum <const> = setmetatable({
       end,
       __newindex = function (_, _, _)
         error("Enum definition cannot be modified")
+      end,
+      __pairs = function (_)
+        -- note: lua table iteration is in arbitrary order whereas this always
+        -- iterates in the same order which is technically backwards compatible
+        -- for loops: https://www.lua.org/manual/5.4/manual.html#3.3.5
+        local function iterate(names, name) -- state variable, initial or previous control value
+          -- note: not strictly necessary as table.remove({}, 1) and inner[nil]
+          -- both return nil so the loop ends on it's own but this is safer
+          if #names == 0 then
+            return
+          end
+
+          local name <const> = table.remove(names, 1)
+          local value <const> = symbols_by_name[name].value
+          return name, value -- control value, remaining loop values
+        end
+
+        local names <const> = {}
+        for name, _ in pairs(symbols_by_name) do
+          table.insert(names, name)
+        end
+
+        -- iterator function, state variable, initial control value, closing variable
+        return iterate, names, names[1], nil
       end,
       __call = function (_, value)
         return symbols_by_value[value]
@@ -227,49 +204,6 @@ local Enum <const> = setmetatable({
 })
 
 --[[
-Enum unit tests
---]]
-
-assert(countTableKeys(enum_private_data) == 0) -- GC
-
-local test1 = Enum({'RED', 'GREEN', 'BLUE'})
-local test2 = Enum{'RED', 'GREEN', 'BLUE'}
-assert(Enum.is(test1))
-assert(not Enum.is({}))
-
-assert(test1.RED == Symbol(test1, 'RED', 'RED')) -- FIXME: consider this
--- assert(test1.contains(Symbol(test1, 'RED', 'RED'))) -- FIXME: consider this
-
-local test1_string_repr = tostring(test1)
-assert(string.find(test1_string_repr, 'Enum: ') == 1)
-
-assert(test1 == test1)
-assert(test1 ~= test2)
-assert(test1.RED == test1('RED'))
-assert(test1.RED ~= test1.GREEN)
-assert(test1.RED ~= test2.RED)
-assert(test1.RED.enum == test1)
-assert(test1.RED.name == 'RED')
-assert(test1.RED.value == 'RED')
-
-test2 = nil
-local test2 = Enum{RED='#f00', GREEN='#0f0', BLUE='#00f'}
-
-assert(test1 ~= test2)
-assert(test1.RED ~= test2.RED)
-assert(test2.RED.name == 'RED')
-assert(test2.RED.value == '#f00')
-assert(test2.RED == test2('#f00'))
-
-collectgarbage('collect')
-assert(countTableKeys(enum_private_data) == 2) -- GC
-
-test1 = nil
-test2 = nil
-collectgarbage('collect')
-assert(countTableKeys(enum_private_data) == 0) -- GC
-
---[[
 Module Interface
 --]]
 
@@ -280,9 +214,246 @@ if pcall(debug.getlocal, 4, 1) then
 end
 
 --[[
+Utilities
+--]]
+
+local function countTableKeys(value)
+  local keys = {}
+  for key, _ in pairs(value) do
+    table.insert(keys, key)
+  end
+
+  return #keys
+end
+
+--[[
 Command Line Interface
 --]]
 
--- TODO: implement a command line interface?
--- run unit and integration tests? run benchmarks?
-print("Hello, world!")
+local lu <const> = require('luaunit/luaunit')
+
+-- symbol tests
+test_symbol = {}
+
+function test_symbol.test_lifecycle()
+  collectgarbage('collect')
+  local initial_count = countTableKeys(symbol_private_data)
+
+  local symbol = Symbol({}, 'test', 'test')
+  lu.assertEquals(countTableKeys(symbol_private_data), initial_count + 1)
+
+  symbol = nil
+  collectgarbage('collect')
+  lu.assertEquals(countTableKeys(symbol_private_data), initial_count)
+end
+
+function test_symbol.test_type_name()
+  local symbol <const> = Symbol({}, 'test', 'test')
+  local repr <const> = tostring(symbol)
+
+  lu.assertTrue(string.find(repr, 'Symbol: ') == 1)
+end
+
+function test_symbol.test_create()
+  local enum <const> = {}
+
+  local symbol = Symbol.create(enum, 'explicit', 'create')
+  lu.assertEquals(symbol.enum, enum)
+  lu.assertEquals(symbol.name, 'explicit')
+  lu.assertEquals(symbol.value, 'create')
+
+  local symbol = Symbol(enum, 'shortcut', 'create')
+  lu.assertEquals(symbol.enum, enum)
+  lu.assertEquals(symbol.name, 'shortcut')
+  lu.assertEquals(symbol.value, 'create')
+
+  lu.assertErrorMsgContains(
+    "Symbol enum instance must be an empty table",
+    Symbol.create,
+    {something='not empty'}
+  )
+
+  lu.assertErrorMsgContains(
+    "Symbol name must be a non-empty string",
+    Symbol.create,
+    {}
+  )
+
+  lu.assertErrorMsgContains(
+    "Symbol name must be a non-empty string",
+    Symbol.create,
+    {},
+    ''
+  )
+
+  lu.assertErrorMsgContains(
+    "Symbol value must be a boolean, string, or number",
+    Symbol.create,
+    {},
+    'name'
+  )
+
+  lu.assertErrorMsgContains(
+    "Symbol value must be a boolean, string, or number",
+    Symbol.create,
+    {},
+    'name',
+    {}
+  )
+end
+
+function test_symbol.test_equality()
+  local enum <const> = {}
+  local symbol1 <const> = Symbol(enum, 'name', 'value')
+  local symbol2 <const> = Symbol(enum, 'name', 'value')
+  local symbol3 <const> = Symbol(enum, 'something', 'else')
+
+  lu.assertTrue(symbol1 == symbol1)
+  lu.assertTrue(symbol1 == symbol2)
+  lu.assertTrue(symbol1 ~= symbol3)
+  lu.assertTrue(symbol2 ~= symbol3)
+end
+
+function test_symbol.test_is_instance()
+  local symbol <const> = Symbol({}, 'name', 'value')
+  lu.assertTrue(Symbol.is(symbol))
+  lu.assertFalse(Symbol.is({}))
+end
+
+-- enum tests
+test_enum = {}
+
+function test_enum.test_lifecycle()
+  collectgarbage('collect')
+  local initial_count = countTableKeys(enum_private_data)
+
+  local enum = Enum{'RED', 'GREEN', 'BLUE'}
+  lu.assertEquals(countTableKeys(enum_private_data), initial_count + 1)
+
+  enum = nil
+  collectgarbage('collect')
+  lu.assertEquals(countTableKeys(enum_private_data), initial_count)
+end
+
+function test_enum.test_type_name()
+  local enum <const> = Enum{'RED', 'GREEN', 'BLUE'}
+  local repr <const> = tostring(enum)
+
+  lu.assertTrue(string.find(repr, 'Enum: ') == 1)
+end
+
+function test_enum.test_create_names()
+  local names <const> = {'RED', 'GREEN', 'BLUE'}
+
+  local enum = Enum.create(names)
+  for _, name in ipairs(names) do
+    local symbol_by_name = enum[name]
+    local symbol_by_value = enum(name)
+
+    lu.assertTrue(symbol_by_name ~= nil)
+    lu.assertTrue(symbol_by_value ~= nil)
+    lu.assertTrue(symbol_by_name == symbol_by_value)
+  end
+
+  local enum = Enum(names)
+  for _, name in ipairs(names) do
+    local symbol_by_name = enum[name]
+    local symbol_by_value = enum(name)
+
+    lu.assertTrue(symbol_by_name ~= nil)
+    lu.assertTrue(symbol_by_value ~= nil)
+    lu.assertTrue(symbol_by_name == symbol_by_value)
+  end
+
+  lu.assertErrorMsgContains(
+    "Enum symbols must be a non-empty table",
+    Enum.create,
+    {}
+  )
+
+  lu.assertErrorMsgContains(
+    "Enum symbol name is not unique: RED",
+    Enum.create,
+    {'RED', 'RED'}
+  )
+end
+
+function test_enum.test_create_names_values()
+  local names_values <const> = {NAME='name', AGE='age'}
+
+  local enum = Enum.create(names_values)
+  for name, value in pairs(names_values) do
+    local symbol_by_name = enum[name]
+    local symbol_by_value = enum(value)
+
+    lu.assertTrue(symbol_by_name ~= nil)
+    lu.assertTrue(symbol_by_value ~= nil)
+    lu.assertTrue(symbol_by_name == symbol_by_value)
+  end
+
+  local enum = Enum(names_values)
+  for name, value in pairs(names_values) do
+    local symbol_by_name = enum[name]
+    local symbol_by_value = enum(value)
+
+    lu.assertTrue(symbol_by_name ~= nil)
+    lu.assertTrue(symbol_by_value ~= nil)
+    lu.assertTrue(symbol_by_name == symbol_by_value)
+  end
+
+  lu.assertErrorMsgContains(
+    "Enum symbols must be a non-empty table",
+    Enum.create,
+    {}
+  )
+
+  lu.assertErrorMsgContains(
+    "Enum symbol value is not unique: red",
+    Enum.create,
+    {RED='red', FOO='red'}
+  )
+end
+
+function test_enum.test_enumerate_pairs()
+  local names_values = {NAME='name', AGE='age'}
+  local enum = Enum(names_values)
+
+  for name, value in pairs(enum) do
+    lu.assertEquals(names_values[name], value)
+    names_values[name] = nil
+  end
+
+  lu.assertEquals(countTableKeys(names_values), 0)
+end
+
+-- TODO: implement this interface
+--[[
+function test_enum.test_enumerate_ipairs()
+  local names_values = {NAME='name', AGE='age'}
+  local enum = Enum(names_values)
+
+  for _, symbol in ipairs(enum) do
+    lu.assertEquals(names_values[symbol.name], symbol.value)
+    names_values[symbol.name] = nil
+  end
+
+  lu.assertEquals(countTableKeys(names_values), 0)
+end
+--]]
+
+function test_enum.test_equality()
+  local enum1 = Enum{'RED', 'GREEN', 'BLUE'}
+  local enum2 = Enum{'RED', 'GREEN', 'BLUE'}
+
+  lu.assertTrue(enum1 == enum1)
+  lu.assertFalse(enum1 == enum2)
+end
+
+function test_enum.test_is_instance()
+  local enum <const> = Enum{'RED', 'GREEN'}
+  lu.assertTrue(Enum.is(enum))
+  lu.assertFalse(Enum.is({}))
+end
+
+-- run tests
+os.exit(lu.LuaUnit.run())
