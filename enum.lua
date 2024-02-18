@@ -1,5 +1,11 @@
--- FIXME: Support other Lua versions.
-assert(_VERSION == "Lua 5.4", "Enum: unsupported lua version: " .. tostring(_VERSION))
+--[[
+Lua Version Check
+--]]
+
+local supported_lua_versions <const> = {['Lua 5.4']=true}
+if not supported_lua_versions[_VERSION] then
+  warn("lua-enum: detected unsupported lua version: " .. tostring(_VERSION))
+end
 
 --[[
 Symbol
@@ -8,72 +14,71 @@ Symbol
 local symbol_metatable <const> = {}
 local symbol_private_data <const> = setmetatable({}, {__mode='k'})
 
-local Symbol <const> = setmetatable({
-  create = function (enum, name, value)
-    if type(enum) ~= 'table' or next(enum) then
-      error("Symbol enum instance must be an empty table")
-    end
+-- private constructor
+local Symbol_create <const> = function (enum, name, value)
+  if type(enum) ~= 'table' or next(enum) then
+    error("Symbol enum instance must be an empty table")
+  end
 
-    if type(name) ~= 'string' or string.len(name) == 0 then
-      error("Symbol name must be a non-empty string")
-    end
+  if type(name) ~= 'string' or string.len(name) == 0 then
+    error("Symbol name must be a non-empty string")
+  end
 
-    -- FIXME: allow tables if we can guarantee they won't be modified?
-    local allowed_value_types = {['boolean']=true, ['string']=true, ['number']=true}
-    if not allowed_value_types[type(value)] then
-      error("Symbol value must be a boolean, string, or number")
-    end
+  -- FIXME: allow tables if we can guarantee they won't be modified?
+  local allowed_value_types = {['boolean']=true, ['string']=true, ['number']=true}
+  if not allowed_value_types[type(value)] then
+    error("Symbol value must be a boolean, string, or number")
+  end
 
-    local instance <const> = {}
-    local private <const> = {enum=enum, name=name, value=value}
-    symbol_private_data[instance] = private
+  local instance <const> = {}
+  local private <const> = {enum=enum, name=name, value=value}
+  symbol_private_data[instance] = private
 
-    return setmetatable(instance, {
-      __name = 'Symbol',
-      __metatable = symbol_metatable,
-      __index = function (_, key)
-        if key == 'name' or key == 'value' or key == 'enum' then
-          return private[key]
-        else
-          error("Symbol invalid attribute: " .. tostring(key))
-        end
-      end,
-      __newindex = function (_, _, _)
-        error("Symbol definition cannot be modified")
-      end,
-      __eq = function (a, b)
-        -- note: implicitly verifies both values are symbol instances since at
-        -- least one of them must be for this function to be called
-        if getmetatable(a) ~= getmetatable(b) then
-          return false
-        end
-
-        -- retrieve instance private data
-        local pa <const> = assert(symbol_private_data[a], "Symbol instance not recognized: " .. tostring(a))
-        local pb <const> = assert(symbol_private_data[b], "Symbol instance not recognized: " .. tostring(b))
-
-        -- must belong to the same enum instance and have the same name
-        if pa['enum'] ~= pb['enum'] then
-          return false
-        end
-
-        -- must have the same name and value
-        -- FIXME: implement support for non-unique values
-        return (pa['name'] == pb['name'] and pa['value'] == pb['value'])
-      end,
-      __gc = function (_)
-        symbol_private_data[instance] = nil
+  return setmetatable(instance, {
+    __name = 'Symbol',
+    __metatable = symbol_metatable,
+    __index = function (_, key)
+      if key == 'name' or key == 'value' or key == 'enum' then
+        return private[key]
+      else
+        error("Symbol invalid attribute: " .. tostring(key))
       end
-    })
-  end,
+    end,
+    __newindex = function (_, _, _)
+      error("Symbol definition cannot be modified")
+    end,
+    __eq = function (a, b)
+      -- note: implicitly verifies both values are symbol instances since at
+      -- least one of them must be for this function to be called
+      if getmetatable(a) ~= getmetatable(b) then
+        return false
+      end
+
+      -- retrieve instance private data
+      local pa <const> = assert(symbol_private_data[a], "Symbol instance not recognized: " .. tostring(a))
+      local pb <const> = assert(symbol_private_data[b], "Symbol instance not recognized: " .. tostring(b))
+
+      -- must belong to the same enum instance and have the same name
+      if pa['enum'] ~= pb['enum'] then
+        return false
+      end
+
+      -- must have the same name and value
+      -- FIXME: implement support for non-unique values
+      return (pa['name'] == pb['name'] and pa['value'] == pb['value'])
+    end,
+    __gc = function (_)
+      symbol_private_data[instance] = nil
+    end
+  })
+end
+
+-- public interface
+local Symbol <const> = {
   is = function (value)
     return (getmetatable(value) == symbol_metatable)
   end
-}, {
-  __call = function (module, ...)
-    return module.create(...)
-  end
-})
+}
 
 --[[
 Enum
@@ -82,6 +87,7 @@ Enum
 local enum_metatable <const> = {}
 local enum_private_data <const> = setmetatable({}, {__mode='k'})
 
+-- public interface
 local Enum <const> = setmetatable({
   create = function (symbols)
     if type(symbols) ~= 'table' or not next(symbols) then
@@ -110,7 +116,7 @@ local Enum <const> = setmetatable({
     -- use the array values as symbol names
     if symbols_is_array then
       for _, name in ipairs(symbols) do
-        local symbol <const> = Symbol(instance, name, name)
+        local symbol <const> = Symbol_create(instance, name, name)
         if symbols_by_name[symbol.name] then
           error("Enum symbol name is not unique: " .. tostring(symbol.name))
         end
@@ -121,7 +127,7 @@ local Enum <const> = setmetatable({
     -- use the table entries as (name, value) pairs
     else
       for name, value in pairs(symbols) do
-        local symbol <const> = Symbol(instance, name, value)
+        local symbol <const> = Symbol_create(instance, name, value)
         if symbols_by_name[symbol.name] then
           error("Enum symbol name is not unique: " .. tostring(symbol.name))
         end
@@ -239,7 +245,7 @@ function test_symbol.test_lifecycle()
   collectgarbage('collect')
   local initial_count = countTableKeys(symbol_private_data)
 
-  local symbol = Symbol({}, 'test', 'test')
+  local symbol = Symbol_create({}, 'test', 'test')
   lu.assertEquals(countTableKeys(symbol_private_data), initial_count + 1)
 
   symbol = nil
@@ -248,7 +254,7 @@ function test_symbol.test_lifecycle()
 end
 
 function test_symbol.test_type_name()
-  local symbol <const> = Symbol({}, 'test', 'test')
+  local symbol <const> = Symbol_create({}, 'test', 'test')
   local repr <const> = tostring(symbol)
 
   lu.assertTrue(string.find(repr, 'Symbol: ') == 1)
@@ -256,46 +262,40 @@ end
 
 function test_symbol.test_create()
   local enum <const> = {}
-
-  local symbol = Symbol.create(enum, 'explicit', 'create')
+  local symbol <const> = Symbol_create(enum, 'explicit', 'create')
   lu.assertEquals(symbol.enum, enum)
   lu.assertEquals(symbol.name, 'explicit')
   lu.assertEquals(symbol.value, 'create')
 
-  local symbol = Symbol(enum, 'shortcut', 'create')
-  lu.assertEquals(symbol.enum, enum)
-  lu.assertEquals(symbol.name, 'shortcut')
-  lu.assertEquals(symbol.value, 'create')
-
   lu.assertErrorMsgContains(
     "Symbol enum instance must be an empty table",
-    Symbol.create,
+    Symbol_create,
     {something='not empty'}
   )
 
   lu.assertErrorMsgContains(
     "Symbol name must be a non-empty string",
-    Symbol.create,
+    Symbol_create,
     {}
   )
 
   lu.assertErrorMsgContains(
     "Symbol name must be a non-empty string",
-    Symbol.create,
+    Symbol_create,
     {},
     ''
   )
 
   lu.assertErrorMsgContains(
     "Symbol value must be a boolean, string, or number",
-    Symbol.create,
+    Symbol_create,
     {},
     'name'
   )
 
   lu.assertErrorMsgContains(
     "Symbol value must be a boolean, string, or number",
-    Symbol.create,
+    Symbol_create,
     {},
     'name',
     {}
@@ -304,9 +304,9 @@ end
 
 function test_symbol.test_equality()
   local enum <const> = {}
-  local symbol1 <const> = Symbol(enum, 'name', 'value')
-  local symbol2 <const> = Symbol(enum, 'name', 'value')
-  local symbol3 <const> = Symbol(enum, 'something', 'else')
+  local symbol1 <const> = Symbol_create(enum, 'name', 'value')
+  local symbol2 <const> = Symbol_create(enum, 'name', 'value')
+  local symbol3 <const> = Symbol_create(enum, 'something', 'else')
 
   lu.assertTrue(symbol1 == symbol1)
   lu.assertTrue(symbol1 == symbol2)
@@ -315,7 +315,7 @@ function test_symbol.test_equality()
 end
 
 function test_symbol.test_is_instance()
-  local symbol <const> = Symbol({}, 'name', 'value')
+  local symbol <const> = Symbol_create({}, 'name', 'value')
   lu.assertTrue(Symbol.is(symbol))
   lu.assertFalse(Symbol.is({}))
 end
