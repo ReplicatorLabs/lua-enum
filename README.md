@@ -12,14 +12,30 @@ Load the `enum.lua` file as a module:
 local enum <const> = require('enum')
 ```
 
-Create and use an enum:
+Create and use enums with matching symbol names and values:
 
 ```lua
-local State <const> = Enum{RUNNING, STOPPED} -- matching symbol names and values
-local Color <const> = Enum{RED='#f00', GREEN='#0f0', BLUE='#00f'} -- different symbol names and values
-
--- TODO: document the rest
+local State <const> = Enum{RUNNING, STOPPED}
+assert(enum.Enum.is(State))
+assert(enum.Symbol.is(State.RUNNING))
+assert(State.RUNNING.name == 'RUNNING')
+assert(State.RUNNING.value == 'RUNNING')
+assert(State.RUNNING.enum == State)
 ```
+
+Create and use enums with separate symbol names and values:
+
+```lua
+local Color <const> = Enum{RED='#f00', GREEN='#0f0', BLUE='#00f'}
+assert(Color.RED.name == 'RED')
+assert(Color.RED.value == '#f00')
+
+local symbol_by_name <const> = Color['RED']
+local symbol_by_value <const> = Color('#f00')
+assert(symbol_by_name == symbol_by_value)
+```
+
+See the unit tests for more exhaustive examples.
 
 ## Tests
 
@@ -28,7 +44,7 @@ script to run the tests:
 
 ```
 git submodule update --init --recursive
-lua ./enum.lua
+lua ./enum.lua -v
 ```
 
 ## Roadmap
