@@ -33,12 +33,23 @@ lua ./enum.lua
 
 ## Roadmap
 
-* [ ] Lua 5.4 support and integration testing.
-* [ ] Lua 5.3 support and integration testing?
-* [ ] Lua 5.2 support and integration testing?
-* [ ] Lua 5.1 support and integration testing?
+Planned:
+
+* [x] Lua 5.4 support.
+  * [ ] Integration testing.
+
+Open to consideration:
+
+* [ ] LuaJIT support.
+  * [ ] Integration testing.
+* [ ] Lua 5.3 support.
+  * [ ] Integration testing.
+* [ ] Lua 5.2 support.
+  * [ ] Integration testing.
+* [ ] Lua 5.1 support.
+  * [ ] Integration testing.
 * [ ] Support for enumerations with non-unique values.
-* [ ] Support for enumerations with table values?
+* [ ] Support for enumerations with table values.
 
 ## References
 
