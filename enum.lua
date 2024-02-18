@@ -31,13 +31,13 @@ local Symbol_create <const> = function (enum, name, value)
   end
 
   local instance <const> = {}
-  local private <const> = {enum=enum, name=name, value=value}
-  symbol_private_data[instance] = private
+  symbol_private_data[instance] = {enum=enum, name=name, value=value}
 
   return setmetatable(instance, {
     __name = 'Symbol',
     __metatable = symbol_metatable,
-    __index = function (_, key)
+    __index = function (self, key)
+      local private <const> = assert(symbol_private_data[self], "Symbol instance not recognized: " .. tostring(self))
       if key == 'name' or key == 'value' or key == 'enum' then
         return private[key]
       else
@@ -89,44 +89,46 @@ local enum_private_data <const> = setmetatable({}, {__mode='k'})
 
 -- public interface
 local Enum <const> = setmetatable({
-  create = function (symbols)
-    if type(symbols) ~= 'table' or not next(symbols) then
+  create = function (symbol_data)
+    if type(symbol_data) ~= 'table' or not next(symbol_data) then
       error("Enum symbols must be a non-empty table")
     end
 
-    -- XXX
-    local symbols_is_array = true
-    local symbols_count = 0
-    for key, value in pairs(symbols) do
-      symbols_count = symbols_count + 1
+    -- detect if the symbol data is a dense array or a map
+    local symbol_data_is_array = true
+    local symbol_data_count = 0
+    for key, value in pairs(symbol_data) do
+      symbol_data_count = symbol_data_count + 1
       if math.type(key) ~= 'integer' then
-        symbols_is_array = false
+        symbol_data_is_array = false
       end
     end
 
-    if symbols_count ~= #symbols then
-      symbols_is_array = false
+    if symbol_data_count ~= #symbol_data then
+      symbol_data_is_array = false
     end
 
-    -- XXX
+    -- create instance here because we need to pass it to symbol instances
     local instance <const> = {}
+    local symbols <const> = {}
     local symbols_by_name <const> = {}
     local symbols_by_value <const> = {}
 
-    -- use the array values as symbol names
-    if symbols_is_array then
-      for _, name in ipairs(symbols) do
+    -- use the symbol data array values as symbol names and values
+    if symbol_data_is_array then
+      for _, name in ipairs(symbol_data) do
         local symbol <const> = Symbol_create(instance, name, name)
         if symbols_by_name[symbol.name] then
           error("Enum symbol name is not unique: " .. tostring(symbol.name))
         end
 
+        table.insert(symbols, symbol)
         symbols_by_name[symbol.name] = symbol
         symbols_by_value[symbol.value] = symbol
       end
-    -- use the table entries as (name, value) pairs
+    -- use the symbol data map entries as name and value pairs
     else
-      for name, value in pairs(symbols) do
+      for name, value in pairs(symbol_data) do
         local symbol <const> = Symbol_create(instance, name, value)
         if symbols_by_name[symbol.name] then
           error("Enum symbol name is not unique: " .. tostring(symbol.name))
@@ -136,19 +138,33 @@ local Enum <const> = setmetatable({
           error("Enum symbol value is not unique: " .. tostring(symbol.value))
         end
 
+        table.insert(symbols, symbol)
         symbols_by_name[symbol.name] = symbol
         symbols_by_value[symbol.value] = symbol
       end
     end
 
-    local private <const> = {symbols_by_name=symbols_by_name, symbols_by_value=symbols_by_value}
-    enum_private_data[instance] = private
+    enum_private_data[instance] = {
+      symbols=symbols,
+      symbols_by_name=symbols_by_name,
+      symbols_by_value=symbols_by_value
+    }
 
     return setmetatable(instance, {
       __name = 'Enum',
       __metatable = enum_metatable,
+      __len = function (_)
+        -- expose symbols as dense array to support ipairs() enumeration
+        return #symbols
+      end,
       __index = function (_, key)
-        return symbols_by_name[key]
+        -- export symbols as dense array to support ipairs() enumeration
+        if math.type(key) == 'integer' then
+          return symbols[key]
+        -- export symbols as map with names as keys
+        else
+          return symbols_by_name[key]
+        end
       end,
       __newindex = function (_, _, _)
         error("Enum definition cannot be modified")
@@ -178,6 +194,7 @@ local Enum <const> = setmetatable({
         return iterate, names, names[1], nil
       end,
       __call = function (_, value)
+        -- look up symbols by value
         return symbols_by_value[value]
       end,
       __eq = function (a, b)
@@ -346,6 +363,8 @@ function test_enum.test_create_names()
   local names <const> = {'RED', 'GREEN', 'BLUE'}
 
   local enum = Enum.create(names)
+  lu.assertEquals(#enum, #names)
+
   for _, name in ipairs(names) do
     local symbol_by_name = enum[name]
     local symbol_by_value = enum(name)
@@ -356,6 +375,8 @@ function test_enum.test_create_names()
   end
 
   local enum = Enum(names)
+  lu.assertEquals(#enum, #names)
+
   for _, name in ipairs(names) do
     local symbol_by_name = enum[name]
     local symbol_by_value = enum(name)
@@ -382,6 +403,8 @@ function test_enum.test_create_names_values()
   local names_values <const> = {NAME='name', AGE='age'}
 
   local enum = Enum.create(names_values)
+  lu.assertEquals(countTableKeys(names_values), #enum)
+
   for name, value in pairs(names_values) do
     local symbol_by_name = enum[name]
     local symbol_by_value = enum(value)
@@ -392,6 +415,8 @@ function test_enum.test_create_names_values()
   end
 
   local enum = Enum(names_values)
+  lu.assertEquals(countTableKeys(names_values), #enum)
+
   for name, value in pairs(names_values) do
     local symbol_by_name = enum[name]
     local symbol_by_value = enum(value)
@@ -414,23 +439,10 @@ function test_enum.test_create_names_values()
   )
 end
 
-function test_enum.test_enumerate_pairs()
-  local names_values = {NAME='name', AGE='age'}
-  local enum = Enum(names_values)
-
-  for name, value in pairs(enum) do
-    lu.assertEquals(names_values[name], value)
-    names_values[name] = nil
-  end
-
-  lu.assertEquals(countTableKeys(names_values), 0)
-end
-
--- TODO: implement this interface
---[[
 function test_enum.test_enumerate_ipairs()
-  local names_values = {NAME='name', AGE='age'}
-  local enum = Enum(names_values)
+  local names_values <const> = {NAME='name', AGE='age'}
+  local enum <const> = Enum(names_values)
+  lu.assertEquals(countTableKeys(names_values), #enum)
 
   for _, symbol in ipairs(enum) do
     lu.assertEquals(names_values[symbol.name], symbol.value)
@@ -439,7 +451,19 @@ function test_enum.test_enumerate_ipairs()
 
   lu.assertEquals(countTableKeys(names_values), 0)
 end
---]]
+
+function test_enum.test_enumerate_pairs()
+  local names_values <const> = {NAME='name', AGE='age'}
+  local enum <const> = Enum(names_values)
+  lu.assertEquals(countTableKeys(names_values), #enum)
+
+  for name, value in pairs(enum) do
+    lu.assertEquals(names_values[name], value)
+    names_values[name] = nil
+  end
+
+  lu.assertEquals(countTableKeys(names_values), 0)
+end
 
 function test_enum.test_equality()
   local enum1 = Enum{'RED', 'GREEN', 'BLUE'}
