@@ -53,6 +53,7 @@ Planned:
 
 * [x] Lua 5.4 support.
   * [ ] Integration testing.
+* LuaRocks package.
 
 Open to consideration:
 
