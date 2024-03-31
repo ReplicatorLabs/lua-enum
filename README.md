@@ -39,7 +39,7 @@ See the unit tests for more exhaustive examples.
 
 ## Tests
 
-Make sure you have the submodules available and run the `enum.lua` file as a
+Make sure you have the submodules available and run the `project.lua` file as a
 script to run the tests:
 
 ```
