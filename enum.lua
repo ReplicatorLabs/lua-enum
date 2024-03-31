@@ -12,7 +12,7 @@ Symbol
 --]]
 
 local symbol_metatable <const> = {}
-local symbol_private_data <const> = setmetatable({}, {__mode='k'})
+local symbol_private <const> = setmetatable({}, {__mode='k'})
 
 -- private constructor
 local Symbol_create <const> = function (enum, name, value)
@@ -31,13 +31,13 @@ local Symbol_create <const> = function (enum, name, value)
   end
 
   local instance <const> = {}
-  symbol_private_data[instance] = {enum=enum, name=name, value=value}
+  symbol_private[instance] = {enum=enum, name=name, value=value}
 
   return setmetatable(instance, {
     __name = 'Symbol',
     __metatable = symbol_metatable,
     __index = function (self, key)
-      local private <const> = assert(symbol_private_data[self], "Symbol instance not recognized: " .. tostring(self))
+      local private <const> = assert(symbol_private[self], "Symbol instance not recognized: " .. tostring(self))
       if key == 'name' or key == 'value' or key == 'enum' then
         return private[key]
       else
@@ -55,8 +55,8 @@ local Symbol_create <const> = function (enum, name, value)
       end
 
       -- retrieve instance private data
-      local pa <const> = assert(symbol_private_data[a], "Symbol instance not recognized: " .. tostring(a))
-      local pb <const> = assert(symbol_private_data[b], "Symbol instance not recognized: " .. tostring(b))
+      local pa <const> = assert(symbol_private[a], "Symbol instance not recognized: " .. tostring(a))
+      local pb <const> = assert(symbol_private[b], "Symbol instance not recognized: " .. tostring(b))
 
       -- must belong to the same enum instance and have the same name
       if pa['enum'] ~= pb['enum'] then
@@ -68,7 +68,7 @@ local Symbol_create <const> = function (enum, name, value)
       return (pa['name'] == pb['name'] and pa['value'] == pb['value'])
     end,
     __gc = function (_)
-      symbol_private_data[instance] = nil
+      symbol_private[instance] = nil
     end
   })
 end
@@ -85,7 +85,7 @@ Enum
 --]]
 
 local enum_metatable <const> = {}
-local enum_private_data <const> = setmetatable({}, {__mode='k'})
+local enum_private <const> = setmetatable({}, {__mode='k'})
 
 -- public interface
 local Enum <const> = setmetatable({
@@ -144,7 +144,7 @@ local Enum <const> = setmetatable({
       end
     end
 
-    enum_private_data[instance] = {
+    enum_private[instance] = {
       symbols=symbols,
       symbols_by_name=symbols_by_name,
       symbols_by_value=symbols_by_value
@@ -205,15 +205,15 @@ local Enum <const> = setmetatable({
         end
 
         -- retrieve instance private data
-        local pa <const> = assert(enum_private_data[a], "Enum instance not recognized: " .. tostring(a))
-        local pb <const> = assert(enum_private_data[b], "Enum instance not recognized: " .. tostring(b))
+        local pa <const> = assert(enum_private[a], "Enum instance not recognized: " .. tostring(a))
+        local pb <const> = assert(enum_private[b], "Enum instance not recognized: " .. tostring(b))
 
         -- must be the same instance but we compare private data tables to
         -- avoid a stack overflow when comparing instance tables (ex: a == b)
         return (pa == pb)
       end,
       __gc = function (_)
-        enum_private_data[instance] = nil
+        enum_private[instance] = nil
       end
     })
   end,
@@ -240,10 +240,10 @@ if os.getenv('LUA_ENUM_LEAK_INTERNALS') == 'TRUE' then
 
   -- stating the obvious but these are not part of the public interface
   module['symbol_metatable'] = symbol_metatable
-  module['symbol_private_data'] = symbol_private_data
+  module['symbol_private'] = symbol_private
   module['Symbol_create'] = Symbol_create
   module['enum_metatable'] = enum_metatable
-  module['enum_private_data'] = enum_private_data
+  module['enum_private'] = enum_private
 end
 
 return module

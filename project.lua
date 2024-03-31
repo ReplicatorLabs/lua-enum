@@ -31,14 +31,14 @@ test_symbol = {}
 
 function test_symbol.test_lifecycle()
   collectgarbage('collect')
-  local initial_count = countTableKeys(enum.symbol_private_data)
+  local initial_count = countTableKeys(enum.symbol_private)
 
   local instance = enum.Symbol_create({}, 'test', 'test')
-  lu.assertEquals(countTableKeys(enum.symbol_private_data), initial_count + 1)
+  lu.assertEquals(countTableKeys(enum.symbol_private), initial_count + 1)
 
   instance = nil
   collectgarbage('collect')
-  lu.assertEquals(countTableKeys(enum.symbol_private_data), initial_count)
+  lu.assertEquals(countTableKeys(enum.symbol_private), initial_count)
 end
 
 function test_symbol.test_type_name()
@@ -113,14 +113,14 @@ test_enum = {}
 
 function test_enum.test_lifecycle()
   collectgarbage('collect')
-  local initial_count = countTableKeys(enum.enum_private_data)
+  local initial_count = countTableKeys(enum.enum_private)
 
   local instance = enum.Enum{'RED', 'GREEN', 'BLUE'}
-  lu.assertEquals(countTableKeys(enum.enum_private_data), initial_count + 1)
+  lu.assertEquals(countTableKeys(enum.enum_private), initial_count + 1)
 
   instance = nil
   collectgarbage('collect')
-  lu.assertEquals(countTableKeys(enum.enum_private_data), initial_count)
+  lu.assertEquals(countTableKeys(enum.enum_private), initial_count)
 end
 
 function test_enum.test_type_name()
