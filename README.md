@@ -44,7 +44,7 @@ script to run the tests:
 
 ```
 git submodule update --init --recursive
-lua ./enum.lua -v
+env LUA_ENUM_LEAK_INTERNALS=TRUE lua ./project.lua
 ```
 
 ## Roadmap
@@ -52,19 +52,20 @@ lua ./enum.lua -v
 Planned:
 
 * [x] Lua 5.4 support.
-  * [ ] Integration testing.
+  * [x] Unit tests.
+  * [ ] Integration tests.
 * LuaRocks package.
 
 Open to consideration:
 
 * [ ] LuaJIT support.
-  * [ ] Integration testing.
+  * [ ] Integration tests.
 * [ ] Lua 5.3 support.
-  * [ ] Integration testing.
+  * [ ] Integration tests.
 * [ ] Lua 5.2 support.
-  * [ ] Integration testing.
+  * [ ] Integration tests.
 * [ ] Lua 5.1 support.
-  * [ ] Integration testing.
+  * [ ] Integration tests.
 * [ ] Support for enumerations with non-unique values.
 * [ ] Support for enumerations with table values.
 
