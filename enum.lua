@@ -86,6 +86,7 @@ Enum
 
 local enum_metatable <const> = {}
 local enum_private <const> = setmetatable({}, {__mode='k'})
+local enum_reserved_keys <const> = {['has']=true}
 
 -- public interface
 local Enum <const> = setmetatable({
@@ -117,6 +118,10 @@ local Enum <const> = setmetatable({
     -- use the symbol data array values as symbol names and values
     if symbol_data_is_array then
       for _, name in ipairs(symbol_data) do
+        if enum_reserved_keys[name] then
+          error("Enum symbol name conflicts with reserved key: " .. name)
+        end
+
         local symbol <const> = Symbol_create(instance, name, name)
         if symbols_by_name[symbol.name] then
           error("Enum symbol name is not unique: " .. tostring(symbol.name))
@@ -129,6 +134,10 @@ local Enum <const> = setmetatable({
     -- use the symbol data map entries as name and value pairs
     else
       for name, value in pairs(symbol_data) do
+        if enum_reserved_keys[name] then
+          error("Enum symbol name conflicts with reserved key: " .. name)
+        end
+
         local symbol <const> = Symbol_create(instance, name, value)
         if symbols_by_name[symbol.name] then
           error("Enum symbol name is not unique: " .. tostring(symbol.name))
@@ -161,8 +170,17 @@ local Enum <const> = setmetatable({
         -- export symbols as dense array to support ipairs() enumeration
         if math.type(key) == 'integer' then
           return symbols[key]
+        -- enum symbol membership test
+        elseif key == 'has' then
+          return function (_, symbol)
+            -- XXX: actually use omitted self value above instead of assuming
+            -- the method is called on this instance
+            assert(Symbol.is(symbol), "symbol parameter must be a Symbol instance")
+            return symbols_by_name[symbol.name] == symbol
+          end
         -- export symbols as map with names as keys
         else
+          assert(enum_reserved_keys[key] == nil, "failed to handle all reserved keys")
           return symbols_by_name[key]
         end
       end,
@@ -244,6 +262,7 @@ if os.getenv('LUA_ENUM_LEAK_INTERNALS') == 'TRUE' then
   module['Symbol_create'] = Symbol_create
   module['enum_metatable'] = enum_metatable
   module['enum_private'] = enum_private
+  module['enum_reserved_keys'] = enum_reserved_keys
 end
 
 return module

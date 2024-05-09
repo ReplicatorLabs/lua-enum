@@ -130,6 +130,16 @@ function test_enum.test_type_name()
   lu.assertTrue(string.find(repr, 'Enum: ') == 1)
 end
 
+function test_enum.test_reserved_keys()
+  for key, _ in pairs(enum.enum_reserved_keys) do
+    lu.assertErrorMsgContains(
+      "Enum symbol name conflicts with reserved key: " .. key,
+      enum.Enum.create,
+      {key}
+    )
+  end
+end
+
 function test_enum.test_create_names()
   local names <const> = {'RED', 'GREEN', 'BLUE'}
 
@@ -248,6 +258,19 @@ function test_enum.test_is_instance()
   local instance <const> = enum.Enum{'RED', 'GREEN'}
   lu.assertTrue(enum.Enum.is(instance))
   lu.assertFalse(enum.Enum.is({}))
+end
+
+function test_enum.test_has_symbol()
+  local instance1 <const> = enum.Enum{'RED', 'GREEN'}
+  local instance2 <const> = enum.Enum{'RED', 'BLUE'}
+
+  lu.assertTrue(instance1:has(instance1('RED')))
+  lu.assertTrue(instance1:has(instance1['GREEN']))
+  lu.assertFalse(instance1:has(instance2.RED))
+
+  lu.assertTrue(instance2:has(instance2('RED')))
+  lu.assertTrue(instance2:has(instance2['BLUE']))
+  lu.assertFalse(instance2:has(instance1.RED))
 end
 
 --[[
