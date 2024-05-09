@@ -89,7 +89,7 @@ local enum_private <const> = setmetatable({}, {__mode='k'})
 local enum_reserved_keys <const> = {['has']=true}
 
 -- private implementation
-local function enum_internal_has (self, symbol)
+local enum_internal_has <const> = function (self, symbol)
   local private <const> = assert(enum_private[self], "Enum instance not recognized: " .. tostring(self))
   assert(Symbol.is(symbol), "symbol parameter must be a Symbol instance")
   return private.symbols_by_name[symbol.name] == symbol
